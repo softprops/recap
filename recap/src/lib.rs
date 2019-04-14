@@ -2,8 +2,8 @@
 //! extracted from strings.
 //!
 //! You may find this crate useful for cases where input is provided as a raw string in a loosely structured format.
-//! A common use case for this is when dealing with log file data that is not stored in a particular structed format
-//! like JSON but rather in a format that can be prepresented with a pattern.
+//! A common use case for this is when you're dealing with log file data that was not stored in a particular structed format
+//! like JSON but rather in a format that can be represented with a pattern.
 //!
 //! Recap is provides what [envy](https://crates.io/crates/envy) provides environment variables for named regex capture groups
 //!
@@ -107,7 +107,7 @@ mod tests {
     }
 
     #[test]
-    fn it_works() {
+    fn deserializes_matching_captures() {
         assert_eq!(
             from_captures::<LogEntry>(
                 &Regex::new(
@@ -128,5 +128,37 @@ mod tests {
                 baz: "three".into()
             })
         )
+    }
+
+    #[test]
+    fn fails_without_captures() {
+        let result = from_captures::<LogEntry>(
+                &Regex::new(
+                    "test"
+                )
+                .unwrap(),
+                "one two three"
+            );
+        match result {
+            Ok(_) => panic!("should have failed"),
+            // enum variants on type aliases are experimental
+            Err(err) => assert_eq!(err.to_string(), "No captures resolved in string \'one two three\'")
+        }
+    }
+
+        #[test]
+    fn fails_with_unmatched_captures() {
+        let result = from_captures::<LogEntry>(
+                &Regex::new(
+                    ".+"
+                )
+                .unwrap(),
+                "one two three"
+            );
+        match result {
+            Ok(_) => panic!("should have failed"),
+            // enum variants on type aliases are experimental
+            Err(err) => assert_eq!(err.to_string(), "missing value for field foo")
+        }
     }
 }
