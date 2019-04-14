@@ -1,4 +1,4 @@
-# recap
+# recap [![Build Status](https://travis-ci.org/softprops/recap.svg?branch=master)](https://travis-ci.org/softprops/recap) [![Coverage Status](https://coveralls.io/repos/github/softprops/recap/badge.svg)](https://coveralls.io/github/softprops/recap)
 
 > deserialize named capture groups into typesafe structs
 
