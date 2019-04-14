@@ -97,8 +97,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::{from_captures, Regex};
-    use std::error::Error;
     use serde::Deserialize;
+    use std::error::Error;
 
     #[derive(Debug, PartialEq, Deserialize)]
     struct LogEntry {
@@ -134,33 +134,26 @@ mod tests {
 
     #[test]
     fn fails_without_captures() -> Result<(), Box<dyn Error>> {
-        let result = from_captures::<LogEntry>(
-                &Regex::new(
-                    "test"
-                )?,
-                "one two three"
-            );
+        let result = from_captures::<LogEntry>(&Regex::new("test")?, "one two three");
         match result {
             Ok(_) => panic!("should have failed"),
             // enum variants on type aliases are experimental
-            Err(err) => assert_eq!(err.to_string(), "No captures resolved in string \'one two three\'")
+            Err(err) => assert_eq!(
+                err.to_string(),
+                "No captures resolved in string \'one two three\'"
+            ),
         }
 
         Ok(())
     }
 
-        #[test]
+    #[test]
     fn fails_with_unmatched_captures() -> Result<(), Box<dyn Error>> {
-        let result = from_captures::<LogEntry>(
-                &Regex::new(
-                    ".+"
-                )?,
-                "one two three"
-            );
+        let result = from_captures::<LogEntry>(&Regex::new(".+")?, "one two three");
         match result {
             Ok(_) => panic!("should have failed"),
             // enum variants on type aliases are experimental
-            Err(err) => assert_eq!(err.to_string(), "missing value for field foo")
+            Err(err) => assert_eq!(err.to_string(), "missing value for field foo"),
         }
 
         Ok(())
