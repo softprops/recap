@@ -10,7 +10,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
     let regex = extract_regex(&item).expect(
         r#"Unable to resolve recap regex.
-            Make sure your structure has declared a attribute in the form:
+            Make sure your structure has declared an attribute in the form:
             #[derive(Deserialize, Recap)]
             #[recap(regex ="your-pattern-here")]
             struct YourStruct { ... }
