@@ -12,7 +12,36 @@
 //!
 //! # Examples
 //!
-//! Below is an example
+//! Below is an example that derives a `FromStr` for your type that will
+//! parse into the struct using named capture groups
+//!
+//! ```rust
+//! use recap::{Recap, Regex};
+//! use serde::Deserialize;
+//! use std::error::Error;
+//!
+//! #[derive(Debug, Deserialize, PartialEq, Recap)]
+//! #[recap(regex=r#"(?P<foo>\S+)\s(?P<bar>\S+)"#)]
+//! struct Example {
+//!   foo: String,
+//!   bar: String,
+//! }
+//!
+//! fn main() -> Result<(), Box<dyn Error>> {
+//!
+//!   assert_eq!(
+//!      "hello there".parse::<Example>()?,
+//!      Example {
+//!        foo: "hello".into(),
+//!        bar: "there".into()
+//!      }
+//!   );
+//!
+//!   Ok(())
+//! }
+//! ```
+//!
+//! You can also use recap by using the generic function `from_captures`
 //!
 //! ```rust
 //! use recap::{Regex, from_captures};
@@ -45,7 +74,6 @@
 //!   Ok(())
 //! }
 //! ```
-
 pub use regex::Regex;
 use serde::de::DeserializeOwned;
 use std::convert::identity;
