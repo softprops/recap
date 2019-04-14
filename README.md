@@ -24,7 +24,7 @@ use recap::Recap;
 use serde::Deserialize;
 use std::error::Error;
 
-#[derive(Debug, PartialEq, Deserialize, Recap)]
+#[derive(Debug, Deserialize, Recap)]
 #[recap(regex = r#"(?x)
     (?P<foo>\d+)
     \s+
