@@ -6,7 +6,7 @@ Recap is provides what [envy](https://crates.io/crates/envy) provides environmen
 
 ## 🤔 who is this for
 
-You may find this crate useful for cases where your applicationi needs to extract information from string input provided by a third party that has a loosely structured format.
+You may find this crate useful for cases where your application needs to extract information from string input provided by a third party that has a loosely structured format.
 
 A common use case for this is when you are dealing with log file data that was not stored in a particular structed format like JSON but rather in a format that can be represented with a pattern.
 

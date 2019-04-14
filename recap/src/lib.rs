@@ -7,8 +7,6 @@
 //!
 //! Recap is provides what [envy](https://crates.io/crates/envy) provides environment variables for named regex capture groups
 //!
-//! 💡 For convenience the [regex](https://crates.io/crates/regex) crate's [`Regex`](https://docs.rs/regex/latest/regex/struct.Regex.html)
-//! type is re-exported
 //!
 //! # Examples
 //!
@@ -16,7 +14,7 @@
 //! parse into the struct using named capture groups
 //!
 //! ```rust
-//! use recap::{Recap, Regex};
+//! use recap::Recap;
 //! use serde::Deserialize;
 //! use std::error::Error;
 //!
@@ -41,7 +39,11 @@
 //! }
 //! ```
 //!
-//! You can also use recap by using the generic function `from_captures`
+//! You can also use recap by using the generic function `from_captures` in which
+//! case you'll be reponsible for bringing your only Regex reference.
+//!
+//! 💡 For convenience the [regex](https://crates.io/crates/regex) crate's [`Regex`](https://docs.rs/regex/latest/regex/struct.Regex.html)
+//! type is re-exported
 //!
 //! ```rust
 //! use recap::{Regex, from_captures};
