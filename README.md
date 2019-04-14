@@ -1,4 +1,4 @@
-# recap [![Build Status](https://travis-ci.org/softprops/recap.svg?branch=master)](https://travis-ci.org/softprops/recap) [![Coverage Status](https://coveralls.io/repos/github/softprops/recap/badge.svg)](https://coveralls.io/github/softprops/recap)
+# recap [![Build Status](https://travis-ci.org/softprops/recap.svg?branch=master)](https://travis-ci.org/softprops/recap) [![Coverage Status](https://coveralls.io/repos/github/softprops/recap/badge.svg)](https://coveralls.io/github/softprops/recap) [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE) [![crates.io](https://img.shields.io/crates/v/recap.svg)](https://crates.io/crates/recap) [![Released API docs](https://docs.rs/recap/badge.svg)](http://docs.rs/recap) [![Master API docs](https://img.shields.io/badge/docs-master-green.svg)](https://softprops.github.io/recap)
 
 > deserialize named capture groups into typesafe structs
 
