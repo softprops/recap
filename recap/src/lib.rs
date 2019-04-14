@@ -97,6 +97,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{from_captures, Regex};
+    use std::error::Error;
     use serde::Deserialize;
 
     #[derive(Debug, PartialEq, Deserialize)]
@@ -107,7 +108,7 @@ mod tests {
     }
 
     #[test]
-    fn deserializes_matching_captures() {
+    fn deserializes_matching_captures() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             from_captures::<LogEntry>(
                 &Regex::new(
@@ -118,25 +119,25 @@ mod tests {
                     \s+
                     (?P<baz>\S+)
                 "#
-                )
-                .unwrap(),
+                )?,
                 "one two three"
-            ),
-            Ok(LogEntry {
+            )?,
+            LogEntry {
                 foo: "one".into(),
                 bar: "two".into(),
                 baz: "three".into()
-            })
-        )
+            }
+        );
+
+        Ok(())
     }
 
     #[test]
-    fn fails_without_captures() {
+    fn fails_without_captures() -> Result<(), Box<dyn Error>> {
         let result = from_captures::<LogEntry>(
                 &Regex::new(
                     "test"
-                )
-                .unwrap(),
+                )?,
                 "one two three"
             );
         match result {
@@ -144,15 +145,16 @@ mod tests {
             // enum variants on type aliases are experimental
             Err(err) => assert_eq!(err.to_string(), "No captures resolved in string \'one two three\'")
         }
+
+        Ok(())
     }
 
         #[test]
-    fn fails_with_unmatched_captures() {
+    fn fails_with_unmatched_captures() -> Result<(), Box<dyn Error>> {
         let result = from_captures::<LogEntry>(
                 &Regex::new(
                     ".+"
-                )
-                .unwrap(),
+                )?,
                 "one two three"
             );
         match result {
@@ -160,5 +162,7 @@ mod tests {
             // enum variants on type aliases are experimental
             Err(err) => assert_eq!(err.to_string(), "missing value for field foo")
         }
+
+        Ok(())
     }
 }
