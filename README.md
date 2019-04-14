@@ -46,6 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let entry: LogEntry = line.parse()?;
         println!("{:#?}", entry);
     }
+
     Ok(())
 }
 
