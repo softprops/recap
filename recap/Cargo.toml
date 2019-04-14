@@ -3,6 +3,18 @@ name = "recap"
 version = "0.1.0"
 authors = ["softprops <d.tangren@gmail.com>"]
 edition = "2018"
+license = "MIT"
+description = "Deserialize typed structures from regex captures"
+keywords = ["regex", "serde"]
+readme = "../README.md"
+documentation = "https://docs.rs/recap"
+homepage = "https://github.com/softprops/recap"
+repository = "https://github.com/softprops/recap"
+
+[badges]
+coveralls = { repository = "softprops/recap" }
+maintenance = { status = "actively-developed" }
+travis-ci = { repository = "softprops/recap" }
 
 [dependencies]
 regex = "1.1"

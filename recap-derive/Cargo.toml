@@ -2,10 +2,22 @@
 name = "recap-derive"
 version = "0.1.0"
 authors = ["softprops <d.tangren@gmail.com>"]
+description = "Derives FromStr impl for types which are then deserialized using recap"
+license = "MIT"
+keywords = ["regex",  "serde"]
+readme = "../README.md"
+documentation = "https://docs.rs/recap-derive"
+homepage = "https://github.com/softprops/recap"
+repository = "https://github.com/softprops/recap"
 edition = "2018"
 
 [lib]
 proc-macro = true
+
+[badges]
+coveralls = { repository = "softprops/recap" }
+maintenance = { status = "actively-developed" }
+travis-ci = { repository = "softprops/recap" }
 
 [dependencies]
 quote = "0.6"
