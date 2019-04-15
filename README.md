@@ -12,7 +12,7 @@ A common use case for this is when you are dealing with log file data that was n
 
 You may also find this useful parsing other stringly data formats.
 
-This crate would be less appropriate for cases where you're input is provided in a more structured format.
+This crate would be less appropriate for cases where your input is provided in a more structured format.
 I recommend using a crate like [`serde-json`](https://crates.io/crates/serde_json) instead.
 
 ## 📦  install
