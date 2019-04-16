@@ -2,18 +2,18 @@
 
 > deserialize named capture groups into typesafe structs
 
-Recap is provides what [envy](https://crates.io/crates/envy) provides environment variables for[ named capture groups](https://www.regular-expressions.info/named.html). Named regex capture groups are like any other capture group but are associated with name. i.e `(?P<name-of-capture-group>some-pattern)`
+Recap is provides what [envy](https://crates.io/crates/envy) provides for environment variables, for[ named capture groups](https://www.regular-expressions.info/named.html). Named regex capture groups are like any other regex capture group but have the extra property that they are associated with name. i.e `(?P<name-of-capture-group>some-pattern)`
 
 ## 🤔 who is this for
 
 You may find this crate useful for cases where your application needs to extract information from string input provided by a third party that has a loosely structured format.
 
-A common use case for this is when you are dealing with log file data that was not stored in a particular structed format like JSON but rather in a format that can be represented with a pattern.
+A common usecase for this is when you are dealing with log file data that was not stored in a particular structured format like JSON, but rather in a format that can be represented with a pattern.
 
-You may also find this useful parsing other stringly data formats.
+You may also find this useful parsing other loosely formatted data patterns.
 
-This crate would be less appropriate for cases where your input is provided in a more structured format.
-I recommend using a crate like [`serde-json`](https://crates.io/crates/serde_json) instead.
+This crate would be less appropriate for cases where your input is provided in a more structured format, like JSON.
+I recommend using a crate like [`serde-json`](https://crates.io/crates/serde_json) for those cases instead.
 
 ## 📦  install
 
@@ -26,7 +26,7 @@ recap = "0.1"
 
 ## 🤸 usage
 
-A typical recap usage looks like the following. Assuming your rust program looks something like this...
+A typical recap usage looks like the following. Assuming your Rust program looks something like this...
 
 > 💡 These examples use Serde's [derive feature](https://serde.rs/derive.html)
 
