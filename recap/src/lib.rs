@@ -137,6 +137,38 @@ mod tests {
         baz: String,
     }
 
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct LogEntryOptional {
+        foo: String,
+        bar: String,
+        baz: Option<String>,
+    }
+
+    #[test]
+    fn deserializes_matching_captures_optional() -> Result<(), Box<dyn Error>> {
+        assert_eq!(
+            from_captures::<LogEntryOptional>(
+                &Regex::new(
+                    r#"(?x)
+                    (?P<foo>\S+)
+                    \s+
+                    (?P<bar>\S+)
+                    \s+
+                    (?P<baz>\S+)?
+                "#
+                )?,
+                "one two "
+            )?,
+            LogEntryOptional {
+                foo: "one".into(),
+                bar: "two".into(),
+                baz: None
+            }
+        );
+
+        Ok(())
+    }
+
     #[test]
     fn deserializes_matching_captures() -> Result<(), Box<dyn Error>> {
         assert_eq!(
