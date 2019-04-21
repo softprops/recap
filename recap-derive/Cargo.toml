@@ -20,6 +20,7 @@ maintenance = { status = "actively-developed" }
 travis-ci = { repository = "softprops/recap" }
 
 [dependencies]
-quote = "0.6"
-syn = "0.15"
 proc-macro2 = "0.4"
+quote = "0.6"
+regex = "1.1"
+syn = "0.15"
