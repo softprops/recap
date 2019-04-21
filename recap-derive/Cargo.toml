@@ -1,6 +1,6 @@
 [package]
 name = "recap-derive"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["softprops <d.tangren@gmail.com>"]
 description = "Derives FromStr impl for types which are then deserialized using recap"
 license = "MIT"

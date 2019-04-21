@@ -7,6 +7,8 @@ use std::error::Error;
     (?P<foo>\d+)
     \s+
     (?P<bar>true|false)
+    \s+
+    (?P<baz>\S+)
   "#)]
 struct LogEntry {
     foo: usize,
