@@ -75,7 +75,7 @@ fn validate(
     };
     if caps != fields {
         panic!(
-            "Recap could not derive a `FromStr` impl for `{}`.\n\t\t > Expected regex with {} named capture groups but found {}",
+            "Recap could not derive a `FromStr` impl for `{}`.\n\t\t > Expected regex with {} named capture groups to align with struct fields but found {}",
             item.ident, fields, caps
         );
     }
