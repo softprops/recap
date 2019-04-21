@@ -3,7 +3,11 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Ident, Lit, Meta, NestedMeta};
+use regex::Regex;
+use std::convert::identity;
+use syn::{
+    parse_macro_input, Data::Struct, DataStruct, DeriveInput, Fields, Ident, Lit, Meta, NestedMeta,
+};
 
 #[proc_macro_derive(Recap, attributes(recap))]
 pub fn derive_recap(item: TokenStream) -> TokenStream {
@@ -16,6 +20,9 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
             struct YourStruct { ... }
             "#,
     );
+
+    validate(&item, &regex);
+
     let item_ident = &item.ident;
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
 
@@ -46,6 +53,32 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
     };
 
     out.into()
+}
+
+fn validate(
+    item: &DeriveInput,
+    regex: &str,
+) {
+    let regex = Regex::new(&regex).unwrap_or_else(|err| {
+        panic!(
+            "Invalid regular expression provided for `{}`\n{}",
+            &item.ident, err
+        )
+    });
+    let caps = regex.capture_names().filter_map(identity).count();
+    let fields = match &item.data {
+        Struct(DataStruct {
+            fields: Fields::Named(fs),
+            ..
+        }) => fs.named.len(),
+        _ => panic!("Recap regex can only be applied to Structs with named fields"),
+    };
+    if caps != fields {
+        panic!(
+            "Recap could not derive a `FromStr` impl for `{}`.\n\t\t > Expected regex with {} named capture groups but found {}",
+            item.ident, fields, caps
+        );
+    }
 }
 
 fn extract_regex(item: &DeriveInput) -> Option<String> {
