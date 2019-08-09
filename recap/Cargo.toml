@@ -17,11 +17,11 @@ maintenance = { status = "actively-developed" }
 travis-ci = { repository = "softprops/recap" }
 
 [dependencies]
-regex = "1.1"
 envy = "0.4"
-serde = { version = "1.0", features = ["derive"] }
 lazy_static = "1.3"
-recap-derive = { version = "0.1.0", path = "../recap-derive", optional = true }
+recap-derive = { version = "0.1.2", path = "../recap-derive", optional = true }
+regex = "1.2"
+serde = { version = "1.0", features = ["derive"] }
 
 [features]
 default = ["derive"]
