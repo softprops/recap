@@ -44,7 +44,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
         impl #impl_generics  #item_ident #ty_generics #where_clause {
             /// Recap derived method. Returns true when some input text
             /// matches the regex associated with this type
-            fn is_match(input: &str) -> bool {
+            pub fn is_match(input: &str) -> bool {
                 recap::lazy_static! {
                     static ref RE: recap::Regex = recap::Regex::new(#regex)
                         .expect("Failed to compile regex");
