@@ -55,7 +55,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
     };
 
     let injector = Ident::new(
-        &format!("IMPL_FROMSTR_FOR_{}", item.ident.to_string()),
+        &format!("RECAP_IMPL_FOR_{}", item.ident.to_string()),
         Span::call_site(),
     );
 
