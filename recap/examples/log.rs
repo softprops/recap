@@ -21,8 +21,10 @@ fn main() -> Result<(), Box<dyn Error>> {
   2 false world"#;
 
     for line in logs.lines() {
-        let entry: LogEntry = line.parse()?;
-        println!("{:#?}", entry);
+        if LogEntry::is_match(line) {
+            let entry: LogEntry = line.parse()?;
+            println!("{:#?}", entry);
+        }
     }
 
     Ok(())

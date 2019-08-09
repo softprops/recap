@@ -40,6 +40,20 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
         }
     };
 
+    let impl_matcher = quote! {
+        impl #impl_generics  #item_ident #ty_generics #where_clause {
+            /// Recap derived method. Returns true when some input text
+            /// matches the regex associated with this type
+            fn is_match(input: &str) -> bool {
+                recap::lazy_static! {
+                    static ref RE: recap::Regex = recap::Regex::new(#regex)
+                        .expect("Failed to compile regex");
+                }
+                RE.is_match(input)
+            }
+        }
+    };
+
     let injector = Ident::new(
         &format!("IMPL_FROMSTR_FOR_{}", item.ident.to_string()),
         Span::call_site(),
@@ -49,6 +63,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
         const #injector: () = {
             extern crate recap;
             #impl_inner
+            #impl_matcher
         };
     };
 
