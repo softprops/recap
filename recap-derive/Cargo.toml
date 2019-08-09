@@ -1,6 +1,6 @@
 [package]
 name = "recap-derive"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["softprops <d.tangren@gmail.com>"]
 description = "Derives FromStr impl for types which are then deserialized using recap"
 license = "MIT"
@@ -22,5 +22,5 @@ travis-ci = { repository = "softprops/recap" }
 [dependencies]
 proc-macro2 = "0.4"
 quote = "0.6"
-regex = "1.1"
+regex = "1.2"
 syn = "0.15"
