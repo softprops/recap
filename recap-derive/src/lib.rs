@@ -104,7 +104,7 @@ fn extract_regex(item: &DeriveInput) -> Option<String> {
             Meta::List(y) => Some(y),
             _ => None,
         })
-        .filter(|x| x.ident == "recap")
+        .filter(|x| x.path.is_ident("recap"))
         .flat_map(|x| x.nested.into_iter())
         .filter_map(|x| match x {
             NestedMeta::Meta(y) => Some(y),
@@ -114,7 +114,7 @@ fn extract_regex(item: &DeriveInput) -> Option<String> {
             Meta::NameValue(y) => Some(y),
             _ => None,
         })
-        .find(|x| x.ident == "regex")
+        .find(|x| x.path.is_ident("regex"))
         .and_then(|x| match x.lit {
             Lit::Str(y) => Some(y.value()),
             _ => None,
