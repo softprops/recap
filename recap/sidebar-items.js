@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["from_captures","Deserialize a type from named regex capture groups"]],"struct":[["Regex","A compiled regular expression for matching Unicode strings."]],"type":[["Error","A type which encapsulates recap errors"]]});
