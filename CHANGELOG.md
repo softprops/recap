@@ -1,6 +1,7 @@
 # 0.1.2
 
 * Introduce derived `pub fn is_match(txt: &str) -> bool` associated fn on proc macro'd struct
+* Update proc-macro dependencies to stable version 1
 
 # 0.1.1
 
