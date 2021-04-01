@@ -39,6 +39,36 @@
 //! }
 //! ```
 //!
+//! You can also use Recap with Serde's zero-copy deserialization:
+//!
+//! ```rust
+//! use recap::Recap;
+//! use serde::Deserialize;
+//! use std::convert::TryInto;
+//! use std::error::Error;
+//!
+//! #[derive(Debug, Deserialize, PartialEq, Recap)]
+//! #[recap(regex=r#"(?P<foo>\S+)\s(?P<bar>\S+)"#)]
+//! struct Example<'a> {
+//!   foo: &'a str,
+//!   bar: &'a str,
+//! }
+//!
+//! fn main() -> Result<(), Box<dyn Error>> {
+//!   let input = "hello there";
+//!   let result: Example = input.try_into()?;
+//!   assert_eq!(
+//!      result,
+//!      Example {
+//!        foo: "hello",
+//!        bar: "there"
+//!      }
+//!   );
+//!
+//!   Ok(())
+//! }
+//! ```
+//!
 //! You can also use recap by using the generic function `from_captures` in which
 //! case you'll be reponsible for bringing your only Regex reference.
 //!
@@ -79,12 +109,11 @@
 pub use regex::Regex;
 use serde::de::{
     self,
-    DeserializeOwned,
+    Deserialize,
     IntoDeserializer,
-    value::{MapDeserializer, SeqDeserializer},
+    value::{BorrowedStrDeserializer, MapDeserializer, SeqDeserializer},
 };
 use std::convert::identity;
-use std::iter::empty;
 
 // used in derive crate output
 // to derive a static for compiled
@@ -106,13 +135,13 @@ pub use recap_derive::*;
 pub type Error = envy::Error;
 type Result<T> = envy::Result<T>;
 
-struct Vars<Iter>(Iter)
+struct Vars<'a, Iter>(Iter)
     where
-        Iter: IntoIterator<Item = (String, String)>;
+        Iter: IntoIterator<Item = (&'a str, &'a str)>;
 
-struct Val(String, String);
+struct Val<'a>(&'a str, &'a str);
 
-impl<'de> IntoDeserializer<'de, Error> for Val {
+impl<'a: 'de, 'de> IntoDeserializer<'de, Error> for Val<'a> {
     type Deserializer = Self;
 
     fn into_deserializer(self) -> Self::Deserializer {
@@ -120,9 +149,9 @@ impl<'de> IntoDeserializer<'de, Error> for Val {
     }
 }
 
-struct VarName(String);
+struct VarName<'a>(&'a str);
 
-impl<'de> IntoDeserializer<'de, Error> for VarName {
+impl<'a: 'de, 'de> IntoDeserializer<'de, Error> for VarName<'a> {
     type Deserializer = Self;
 
     fn into_deserializer(self) -> Self::Deserializer {
@@ -130,13 +159,13 @@ impl<'de> IntoDeserializer<'de, Error> for VarName {
     }
 }
 
-impl<Iter: Iterator<Item = (String, String)>> Iterator for Vars<Iter> {
-    type Item = (VarName, Val);
+impl<'a, Iter: Iterator<Item = (&'a str, &'a str)>> Iterator for Vars<'a, Iter> {
+    type Item = (VarName<'a>, Val<'a>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0
             .next()
-            .map(|(k, v)| (VarName(k.to_lowercase()), Val(k, v)))
+            .map(|(k, v)| (VarName(k), Val(k, v)))
     }
 }
 
@@ -155,7 +184,7 @@ macro_rules! forward_parsed_values {
     }
 }
 
-impl<'de> de::Deserializer<'de> for Val {
+impl<'a: 'de, 'de> de::Deserializer<'de> for Val<'a> {
     type Error = Error;
     fn deserialize_any<V>(
         self,
@@ -164,7 +193,7 @@ impl<'de> de::Deserializer<'de> for Val {
         where
             V: de::Visitor<'de>,
     {
-        self.1.into_deserializer().deserialize_any(visitor)
+        BorrowedStrDeserializer::new(self.1).deserialize_any(visitor)
     }
 
     fn deserialize_seq<V>(
@@ -174,16 +203,8 @@ impl<'de> de::Deserializer<'de> for Val {
         where
             V: de::Visitor<'de>,
     {
-        // std::str::split doesn't work as expected for our use case: when we
-        // get an empty string we want to produce an empty Vec, but split would
-        // still yield an iterator with an empty string in it. So we need to
-        // special case empty strings.
-        if self.1.is_empty() {
-            SeqDeserializer::new(empty::<Val>()).deserialize_seq(visitor)
-        } else {
-            let values = self.1.split(',').map(|v| Val(self.0.clone(), v.to_owned()));
-            SeqDeserializer::new(values).deserialize_seq(visitor)
-        }
+        let values = self.1.split(',').map(|v| Val(self.0, v));
+        SeqDeserializer::new(values).deserialize_seq(visitor)
     }
 
     fn deserialize_option<V>(
@@ -242,7 +263,7 @@ impl<'de> de::Deserializer<'de> for Val {
     }
 }
 
-impl<'de> de::Deserializer<'de> for VarName {
+impl<'a: 'de, 'de> de::Deserializer<'de> for VarName<'a> {
     type Error = Error;
     fn deserialize_any<V>(
         self,
@@ -275,11 +296,11 @@ impl<'de> de::Deserializer<'de> for VarName {
 }
 
 /// A deserializer for env vars
-struct Deserializer<'de, Iter: Iterator<Item = (String, String)>> {
-    inner: MapDeserializer<'de, Vars<Iter>, Error>,
+struct Deserializer<'a, 'de: 'a, Iter: Iterator<Item = (&'a str, &'a str)>> {
+    inner: MapDeserializer<'de, Vars<'a, Iter>, Error>,
 }
 
-impl<'de, Iter: Iterator<Item = (String, String)>> Deserializer<'de, Iter> {
+impl<'a, 'de: 'a, Iter: Iterator<Item = (&'a str, &'a str)>> Deserializer<'a, 'de, Iter> {
     fn new(vars: Iter) -> Self {
         Deserializer {
             inner: MapDeserializer::new(Vars(vars)),
@@ -287,8 +308,8 @@ impl<'de, Iter: Iterator<Item = (String, String)>> Deserializer<'de, Iter> {
     }
 }
 
-impl<'de, Iter: Iterator<Item = (String, String)>> de::Deserializer<'de>
-for Deserializer<'de, Iter>
+impl<'a: 'de, 'de, Iter: Iterator<Item = (&'a str, &'a str)>> de::Deserializer<'de>
+for Deserializer<'a, 'de, Iter>
 {
     type Error = Error;
     fn deserialize_any<V>(
@@ -319,12 +340,12 @@ for Deserializer<'de, Iter>
     }
 }
 
-/// Deserializes a type based on an iterable of `(String, String)`
+/// Deserializes a type based on an iterable of `(&str, &str)`
 /// representing keys and values
-pub fn from_iter<Iter, T>(iter: Iter) -> Result<T>
+fn from_iter<'a, Iter, T>(iter: Iter) -> Result<T>
     where
-        T: de::DeserializeOwned,
-        Iter: IntoIterator<Item = (String, String)>,
+        T: de::Deserialize<'a>,
+        Iter: IntoIterator<Item = (&'a str, &'a str)>,
 {
     T::deserialize(Deserializer::new(iter.into_iter()))
 }
@@ -332,12 +353,12 @@ pub fn from_iter<Iter, T>(iter: Iter) -> Result<T>
 /// Deserialize a type from named regex capture groups
 ///
 /// See module level documentation for examples
-pub fn from_captures<D>(
-    re: &Regex,
-    input: &str,
+pub fn from_captures<'a, D>(
+    re: &'a Regex,
+    input: &'a str,
 ) -> Result<D>
 where
-    D: DeserializeOwned,
+    D: Deserialize<'a>,
 {
     let caps = re.captures(input).ok_or_else(|| {
         envy::Error::Custom(format!("No captures resolved in string '{}'", input))
@@ -347,7 +368,7 @@ where
             .map(|maybe_name| {
                 maybe_name.and_then(|name| {
                     caps.name(name)
-                        .map(|val| (name.to_string(), val.as_str().to_string()))
+                        .map(|val| (name, val.as_str()))
                 })
             })
             .filter_map(identity),
@@ -372,6 +393,13 @@ mod tests {
         foo: String,
         bar: String,
         baz: Option<String>,
+    }
+
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct LogEntryBorrowed<'a> {
+        foo: &'a str,
+        bar: &'a str,
+        baz: &'a str,
     }
 
     #[test]
@@ -418,6 +446,32 @@ mod tests {
                 foo: "one".into(),
                 bar: "two".into(),
                 baz: "three".into()
+            }
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn deserializes_zero_copy() -> Result<(), Box<dyn Error>> {
+        let input = "one two three";
+        assert_eq!(
+            from_captures::<LogEntryBorrowed>(
+                &Regex::new(
+                    r#"(?x)
+                    (?P<foo>\S+)
+                    \s+
+                    (?P<bar>\S+)
+                    \s+
+                    (?P<baz>\S+)
+                "#
+                )?,
+                input
+            )?,
+            LogEntryBorrowed {
+                foo: "one",
+                bar: "two",
+                baz: "three"
             }
         );
 

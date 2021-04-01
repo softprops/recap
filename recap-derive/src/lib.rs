@@ -26,10 +26,31 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
     let item_ident = &item.ident;
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
 
+    let has_lifetimes = item.generics.lifetimes().count() > 0;
+    let impl_from_str = if !has_lifetimes {
+        quote! {
+            impl #impl_generics std::str::FromStr for #item_ident #ty_generics #where_clause {
+                type Err = recap::Error;
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    recap::lazy_static! {
+                        static ref RE: recap::Regex = recap::Regex::new(#regex)
+                            .expect("Failed to compile regex");
+                    }
+
+                    Ok(recap::from_captures(&RE, s)?)
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    let lifetimes = item.generics.lifetimes();
+    let also_lifetimes = item.generics.lifetimes();
     let impl_inner = quote! {
-        impl #impl_generics std::str::FromStr for #item_ident #ty_generics #where_clause {
-            type Err = recap::Error;
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
+        impl #impl_generics std::convert::TryFrom<& #(#lifetimes)* str> for #item_ident #ty_generics #where_clause {
+            type Error = recap::Error;
+            fn try_from(s: & #(#also_lifetimes)* str) -> Result<Self, Self::Error> {
                 recap::lazy_static! {
                     static ref RE: recap::Regex = recap::Regex::new(#regex)
                         .expect("Failed to compile regex");
@@ -38,6 +59,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
                 Ok(recap::from_captures(&RE, s)?)
             }
         }
+        #impl_from_str
     };
 
     let impl_matcher = quote! {
