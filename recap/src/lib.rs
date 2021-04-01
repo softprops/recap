@@ -109,9 +109,8 @@
 pub use regex::Regex;
 use serde::de::{
     self,
-    Deserialize,
-    IntoDeserializer,
     value::{BorrowedStrDeserializer, MapDeserializer, SeqDeserializer},
+    Deserialize, IntoDeserializer,
 };
 use std::convert::identity;
 
@@ -136,8 +135,8 @@ pub type Error = envy::Error;
 type Result<T> = envy::Result<T>;
 
 struct Vars<'a, Iter>(Iter)
-    where
-        Iter: IntoIterator<Item = (&'a str, &'a str)>;
+where
+    Iter: IntoIterator<Item = (&'a str, &'a str)>;
 
 struct Val<'a>(&'a str, &'a str);
 
@@ -163,9 +162,7 @@ impl<'a, Iter: Iterator<Item = (&'a str, &'a str)>> Iterator for Vars<'a, Iter> 
     type Item = (VarName<'a>, Val<'a>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.0
-            .next()
-            .map(|(k, v)| (VarName(k), Val(k, v)))
+        self.0.next().map(|(k, v)| (VarName(k), Val(k, v)))
     }
 }
 
@@ -190,8 +187,8 @@ impl<'a: 'de, 'de> de::Deserializer<'de> for Val<'a> {
         self,
         visitor: V,
     ) -> Result<V::Value>
-        where
-            V: de::Visitor<'de>,
+    where
+        V: de::Visitor<'de>,
     {
         BorrowedStrDeserializer::new(self.1).deserialize_any(visitor)
     }
@@ -200,8 +197,8 @@ impl<'a: 'de, 'de> de::Deserializer<'de> for Val<'a> {
         self,
         visitor: V,
     ) -> Result<V::Value>
-        where
-            V: de::Visitor<'de>,
+    where
+        V: de::Visitor<'de>,
     {
         let values = self.1.split(',').map(|v| Val(self.0, v));
         SeqDeserializer::new(values).deserialize_seq(visitor)
@@ -211,8 +208,8 @@ impl<'a: 'de, 'de> de::Deserializer<'de> for Val<'a> {
         self,
         visitor: V,
     ) -> Result<V::Value>
-        where
-            V: de::Visitor<'de>,
+    where
+        V: de::Visitor<'de>,
     {
         visitor.visit_some(self)
     }
@@ -237,8 +234,8 @@ impl<'a: 'de, 'de> de::Deserializer<'de> for Val<'a> {
         _: &'static str,
         visitor: V,
     ) -> Result<V::Value>
-        where
-            V: serde::de::Visitor<'de>,
+    where
+        V: serde::de::Visitor<'de>,
     {
         visitor.visit_newtype_struct(self)
     }
@@ -249,8 +246,8 @@ impl<'a: 'de, 'de> de::Deserializer<'de> for Val<'a> {
         _variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value>
-        where
-            V: de::Visitor<'de>,
+    where
+        V: de::Visitor<'de>,
     {
         visitor.visit_enum(self.1.into_deserializer())
     }
@@ -269,8 +266,8 @@ impl<'a: 'de, 'de> de::Deserializer<'de> for VarName<'a> {
         self,
         visitor: V,
     ) -> Result<V::Value>
-        where
-            V: de::Visitor<'de>,
+    where
+        V: de::Visitor<'de>,
     {
         self.0.into_deserializer().deserialize_any(visitor)
     }
@@ -281,8 +278,8 @@ impl<'a: 'de, 'de> de::Deserializer<'de> for VarName<'a> {
         _: &'static str,
         visitor: V,
     ) -> Result<V::Value>
-        where
-            V: serde::de::Visitor<'de>,
+    where
+        V: serde::de::Visitor<'de>,
     {
         visitor.visit_newtype_struct(self)
     }
@@ -309,15 +306,15 @@ impl<'a, 'de: 'a, Iter: Iterator<Item = (&'a str, &'a str)>> Deserializer<'a, 'd
 }
 
 impl<'a: 'de, 'de, Iter: Iterator<Item = (&'a str, &'a str)>> de::Deserializer<'de>
-for Deserializer<'a, 'de, Iter>
+    for Deserializer<'a, 'de, Iter>
 {
     type Error = Error;
     fn deserialize_any<V>(
         self,
         visitor: V,
     ) -> Result<V::Value>
-        where
-            V: de::Visitor<'de>,
+    where
+        V: de::Visitor<'de>,
     {
         self.deserialize_map(visitor)
     }
@@ -326,8 +323,8 @@ for Deserializer<'a, 'de, Iter>
         self,
         visitor: V,
     ) -> Result<V::Value>
-        where
-            V: de::Visitor<'de>,
+    where
+        V: de::Visitor<'de>,
     {
         visitor.visit_map(self.inner)
     }
@@ -343,9 +340,9 @@ for Deserializer<'a, 'de, Iter>
 /// Deserializes a type based on an iterable of `(&str, &str)`
 /// representing keys and values
 fn from_iter<'a, Iter, T>(iter: Iter) -> Result<T>
-    where
-        T: de::Deserialize<'a>,
-        Iter: IntoIterator<Item = (&'a str, &'a str)>,
+where
+    T: de::Deserialize<'a>,
+    Iter: IntoIterator<Item = (&'a str, &'a str)>,
 {
     T::deserialize(Deserializer::new(iter.into_iter()))
 }
@@ -366,10 +363,7 @@ where
     from_iter(
         re.capture_names()
             .map(|maybe_name| {
-                maybe_name.and_then(|name| {
-                    caps.name(name)
-                        .map(|val| (name, val.as_str()))
-                })
+                maybe_name.and_then(|name| caps.name(name).map(|val| (name, val.as_str())))
             })
             .filter_map(identity),
     )
