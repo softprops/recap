@@ -39,6 +39,36 @@
 //! }
 //! ```
 //!
+//! You can also use Recap with Serde's zero-copy deserialization:
+//!
+//! ```rust
+//! use recap::Recap;
+//! use serde::Deserialize;
+//! use std::convert::TryInto;
+//! use std::error::Error;
+//!
+//! #[derive(Debug, Deserialize, PartialEq, Recap)]
+//! #[recap(regex=r#"(?P<foo>\S+)\s(?P<bar>\S+)"#)]
+//! struct Example<'a> {
+//!   foo: &'a str,
+//!   bar: &'a str,
+//! }
+//!
+//! fn main() -> Result<(), Box<dyn Error>> {
+//!   let input = "hello there";
+//!   let result: Example = input.try_into()?;
+//!   assert_eq!(
+//!      result,
+//!      Example {
+//!        foo: "hello",
+//!        bar: "there"
+//!      }
+//!   );
+//!
+//!   Ok(())
+//! }
+//! ```
+//!
 //! You can also use recap by using the generic function `from_captures` in which
 //! case you'll be reponsible for bringing your only Regex reference.
 //!
@@ -77,7 +107,11 @@
 //! }
 //! ```
 pub use regex::Regex;
-use serde::de::DeserializeOwned;
+use serde::de::{
+    self,
+    value::{BorrowedStrDeserializer, MapDeserializer, SeqDeserializer},
+    Deserialize, IntoDeserializer,
+};
 use std::convert::identity;
 
 // used in derive crate output
@@ -98,27 +132,238 @@ pub use recap_derive::*;
 
 /// A type which encapsulates recap errors
 pub type Error = envy::Error;
+type Result<T> = envy::Result<T>;
+
+struct Vars<'a, Iter>(Iter)
+where
+    Iter: IntoIterator<Item = (&'a str, &'a str)>;
+
+struct Val<'a>(&'a str, &'a str);
+
+impl<'a: 'de, 'de> IntoDeserializer<'de, Error> for Val<'a> {
+    type Deserializer = Self;
+
+    fn into_deserializer(self) -> Self::Deserializer {
+        self
+    }
+}
+
+struct VarName<'a>(&'a str);
+
+impl<'a: 'de, 'de> IntoDeserializer<'de, Error> for VarName<'a> {
+    type Deserializer = Self;
+
+    fn into_deserializer(self) -> Self::Deserializer {
+        self
+    }
+}
+
+impl<'a, Iter: Iterator<Item = (&'a str, &'a str)>> Iterator for Vars<'a, Iter> {
+    type Item = (VarName<'a>, Val<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|(k, v)| (VarName(k), Val(k, v)))
+    }
+}
+
+macro_rules! forward_parsed_values {
+    ($($ty:ident => $method:ident,)*) => {
+        $(
+            fn $method<V>(self, visitor: V) -> Result<V::Value>
+                where V: de::Visitor<'de>
+            {
+                match self.1.parse::<$ty>() {
+                    Ok(val) => val.into_deserializer().$method(visitor),
+                    Err(e) => Err(de::Error::custom(format_args!("{} while parsing value '{}' provided by {}", e, self.1, self.0)))
+                }
+            }
+        )*
+    }
+}
+
+impl<'a: 'de, 'de> de::Deserializer<'de> for Val<'a> {
+    type Error = Error;
+    fn deserialize_any<V>(
+        self,
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        BorrowedStrDeserializer::new(self.1).deserialize_any(visitor)
+    }
+
+    fn deserialize_seq<V>(
+        self,
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        let values = self.1.split(',').map(|v| Val(self.0, v));
+        SeqDeserializer::new(values).deserialize_seq(visitor)
+    }
+
+    fn deserialize_option<V>(
+        self,
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        visitor.visit_some(self)
+    }
+
+    forward_parsed_values! {
+        bool => deserialize_bool,
+        u8 => deserialize_u8,
+        u16 => deserialize_u16,
+        u32 => deserialize_u32,
+        u64 => deserialize_u64,
+        i8 => deserialize_i8,
+        i16 => deserialize_i16,
+        i32 => deserialize_i32,
+        i64 => deserialize_i64,
+        f32 => deserialize_f32,
+        f64 => deserialize_f64,
+    }
+
+    #[inline]
+    fn deserialize_newtype_struct<V>(
+        self,
+        _: &'static str,
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: serde::de::Visitor<'de>,
+    {
+        visitor.visit_newtype_struct(self)
+    }
+
+    fn deserialize_enum<V>(
+        self,
+        _name: &'static str,
+        _variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        visitor.visit_enum(self.1.into_deserializer())
+    }
+
+    serde::forward_to_deserialize_any! {
+        char str string unit
+        bytes byte_buf map unit_struct tuple_struct
+        identifier tuple ignored_any
+        struct
+    }
+}
+
+impl<'a: 'de, 'de> de::Deserializer<'de> for VarName<'a> {
+    type Error = Error;
+    fn deserialize_any<V>(
+        self,
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        self.0.into_deserializer().deserialize_any(visitor)
+    }
+
+    #[inline]
+    fn deserialize_newtype_struct<V>(
+        self,
+        _: &'static str,
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: serde::de::Visitor<'de>,
+    {
+        visitor.visit_newtype_struct(self)
+    }
+
+    serde::forward_to_deserialize_any! {
+        char str string unit seq option
+        bytes byte_buf map unit_struct tuple_struct
+        identifier tuple ignored_any enum
+        struct bool u8 u16 u32 u64 i8 i16 i32 i64 f32 f64
+    }
+}
+
+/// A deserializer for env vars
+struct Deserializer<'a, 'de: 'a, Iter: Iterator<Item = (&'a str, &'a str)>> {
+    inner: MapDeserializer<'de, Vars<'a, Iter>, Error>,
+}
+
+impl<'a, 'de: 'a, Iter: Iterator<Item = (&'a str, &'a str)>> Deserializer<'a, 'de, Iter> {
+    fn new(vars: Iter) -> Self {
+        Deserializer {
+            inner: MapDeserializer::new(Vars(vars)),
+        }
+    }
+}
+
+impl<'a: 'de, 'de, Iter: Iterator<Item = (&'a str, &'a str)>> de::Deserializer<'de>
+    for Deserializer<'a, 'de, Iter>
+{
+    type Error = Error;
+    fn deserialize_any<V>(
+        self,
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        self.deserialize_map(visitor)
+    }
+
+    fn deserialize_map<V>(
+        self,
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        visitor.visit_map(self.inner)
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool u8 u16 u32 u64 i8 i16 i32 i64 f32 f64 char str string unit seq
+        bytes byte_buf unit_struct tuple_struct
+        identifier tuple ignored_any option newtype_struct enum
+        struct
+    }
+}
+
+/// Deserializes a type based on an iterable of `(&str, &str)`
+/// representing keys and values
+fn from_iter<'a, Iter, T>(iter: Iter) -> Result<T>
+where
+    T: de::Deserialize<'a>,
+    Iter: IntoIterator<Item = (&'a str, &'a str)>,
+{
+    T::deserialize(Deserializer::new(iter.into_iter()))
+}
 
 /// Deserialize a type from named regex capture groups
 ///
 /// See module level documentation for examples
-pub fn from_captures<D>(
-    re: &Regex,
-    input: &str,
-) -> Result<D, Error>
+pub fn from_captures<'a, D>(
+    re: &'a Regex,
+    input: &'a str,
+) -> Result<D>
 where
-    D: DeserializeOwned,
+    D: Deserialize<'a>,
 {
     let caps = re.captures(input).ok_or_else(|| {
         envy::Error::Custom(format!("No captures resolved in string '{}'", input))
     })?;
-    envy::from_iter(
+    from_iter(
         re.capture_names()
             .map(|maybe_name| {
-                maybe_name.and_then(|name| {
-                    caps.name(name)
-                        .map(|val| (name.to_string(), val.as_str().to_string()))
-                })
+                maybe_name.and_then(|name| caps.name(name).map(|val| (name, val.as_str())))
             })
             .filter_map(identity),
     )
@@ -142,6 +387,13 @@ mod tests {
         foo: String,
         bar: String,
         baz: Option<String>,
+    }
+
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct LogEntryBorrowed<'a> {
+        foo: &'a str,
+        bar: &'a str,
+        baz: &'a str,
     }
 
     #[test]
@@ -188,6 +440,32 @@ mod tests {
                 foo: "one".into(),
                 bar: "two".into(),
                 baz: "three".into()
+            }
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn deserializes_zero_copy() -> Result<(), Box<dyn Error>> {
+        let input = "one two three";
+        assert_eq!(
+            from_captures::<LogEntryBorrowed>(
+                &Regex::new(
+                    r#"(?x)
+                    (?P<foo>\S+)
+                    \s+
+                    (?P<bar>\S+)
+                    \s+
+                    (?P<baz>\S+)
+                "#
+                )?,
+                input
+            )?,
+            LogEntryBorrowed {
+                foo: "one",
+                bar: "two",
+                baz: "three"
             }
         );
 
