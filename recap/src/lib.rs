@@ -112,7 +112,6 @@ use serde::de::{
     value::{BorrowedStrDeserializer, MapDeserializer, SeqDeserializer},
     Deserialize, IntoDeserializer,
 };
-use std::convert::identity;
 
 // used in derive crate output
 // to derive a static for compiled
@@ -365,7 +364,7 @@ where
             .map(|maybe_name| {
                 maybe_name.and_then(|name| caps.name(name).map(|val| (name, val.as_str())))
             })
-            .filter_map(identity),
+            .flatten(),
     )
 }
 
