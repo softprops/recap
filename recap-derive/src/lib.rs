@@ -37,7 +37,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
                             .expect("Failed to compile regex");
                     }
 
-                    Ok(recap::from_captures(&RE, s)?)
+                    recap::from_captures(&RE, s)
                 }
             }
         }
@@ -56,7 +56,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
                         .expect("Failed to compile regex");
                 }
 
-                Ok(recap::from_captures(&RE, s)?)
+                recap::from_captures(&RE, s)
             }
         }
         #impl_from_str
