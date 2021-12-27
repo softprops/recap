@@ -96,13 +96,13 @@ fn validate(
     item: &DeriveInput,
     regex: &str,
 ) {
-    let regex = Regex::new(&regex).unwrap_or_else(|err| {
+    let regex = Regex::new(regex).unwrap_or_else(|err| {
         panic!(
             "Invalid regular expression provided for `{}`\n{}",
             &item.ident, err
         )
     });
-    let caps = regex.capture_names().filter_map(identity).count();
+    let caps = regex.capture_names().flatten().count();
     let fields = match &item.data {
         Struct(DataStruct {
             fields: Fields::Named(fs),
