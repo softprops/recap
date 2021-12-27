@@ -10,6 +10,7 @@ use std::error::Error;
     \s+
     (?P<baz>\S+)
   "#)]
+#[allow(dead_code)]
 struct LogEntry {
     foo: usize,
     bar: bool,
