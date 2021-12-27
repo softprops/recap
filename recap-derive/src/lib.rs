@@ -4,7 +4,6 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use regex::Regex;
-use std::convert::identity;
 use syn::{
     parse_macro_input, Data::Struct, DataStruct, DeriveInput, Fields, Ident, Lit, Meta, NestedMeta,
 };
