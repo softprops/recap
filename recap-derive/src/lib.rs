@@ -7,8 +7,8 @@ use proc_macro2::Span;
 use quote::quote;
 use regex::Regex;
 use syn::{
-    parse_macro_input, Data::Enum, Data::Struct, DataEnum, DataStruct, DeriveInput, Fields, Ident,
-    Lit, Meta, NestedMeta,
+    parse_macro_input, Data::Enum, Data::Struct, DataEnum, DataStruct, DeriveInput, Fields,
+    FieldsUnnamed, Ident, Lit, Meta, NestedMeta, Variant,
 };
 
 #[proc_macro_derive(Recap, attributes(recap))]
@@ -131,8 +131,11 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
                         }
                         Fields::Unnamed(_) => {
                             quote! {
-                                if let Ok(value) = recap::from_captures(&#regex_name_injector, &s) {
-                                    return Ok(#name::#variant_name(value))
+                                if let Some(caps) = #regex_name_injector.captures(&s) {
+                                    let inner = caps.get(1).unwrap().as_str();
+                                    if let Ok(value) = inner.parse() {
+                                        return Ok(#name::#variant_name(value))
+                                    }
                                 }
                             }
                         }
@@ -155,7 +158,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
 
                             #(#try_parse_regexes)*
 
-                            panic!("AAAAHHHHH");
+                            Err(Self::Err::Custom("Uh Oh".to_string()))
                         }
                     }
                 }
@@ -197,8 +200,11 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
                         }
                         Fields::Unnamed(_) => {
                             quote! {
-                                if let Ok(value) = recap::from_captures(&#regex_name_injector, &s) {
-                                    return Ok(#name::#variant_name(value))
+                                if let Some(caps) = #regex_name_injector.captures(&s) {
+                                    let inner = caps.get(1).unwrap().as_str();
+                                    if let Ok(value) = inner.parse() {
+                                        return Ok(#name::#variant_name(value))
+                                    }
                                 }
                             }
                         }
@@ -219,7 +225,8 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
                                 #(#from_str_regexes)*
                             }
                             #(#try_parse_regexes)*
-                            panic!("AAAAHHHHH");
+
+                            Err(Self::Error::Custom("Uh Oh".to_string()))
                         }
                     }
                     #impl_from_str
@@ -310,9 +317,9 @@ fn validate(
             };
             if caps != fields {
                 panic!(
-            "Recap could not derive a `FromStr` impl for `{}`.\n\t\t > Expected regex with {} named capture groups to align with struct fields but found {}",
-            item.ident, fields, caps
-        );
+                    "Recap could not derive a `FromStr` impl for `{}`.\n\t\t > Expected regex with {} named capture groups to align with struct fields but found {}",
+                    item.ident, fields, caps
+                );
             }
         }
         Regexes::EnumRegexes(regexes) => {
@@ -320,25 +327,26 @@ fn validate(
                 Enum(DataEnum { variants, .. }) => {
                     for variant in variants {
                         let variant_name = format!("{}", variant.ident);
-                        match regexes.get(&variant_name) {
-                            Some(regex) => {
-                                let regex = Regex::new(regex).unwrap_or_else(|err| {
-                                    panic!(
-                                        "Invalid regular expression provided for `{}`\n{}",
-                                        &item.ident, err
-                                    )
-                                });
+                        let regex =
+                            Regex::new(regexes.get(&variant_name).unwrap()).unwrap_or_else(|err| {
+                                panic!(
+                                    "Invalid regular expression provided for `{}`\n{}",
+                                    &item.ident, err
+                                )
+                            });
+                        match &variant.fields {
+                            Fields::Named(_) | Fields::Unnamed(_) => {
                                 let caps = regex.capture_names().flatten().count();
                                 let fields = variant.fields.len();
                                 if caps != fields {
                                     panic!(
-            "Recap could not derive a `FromStr` impl for `{}`.\n\t\t > Expected regex with {} named capture groups to align with struct fields but found {}",
-            item.ident, fields, caps
-        );
+                                        "Recap could not derive a `FromStr` impl for `{}`.\n\t\t > Expected regex with {} named capture groups to align with struct fields but found {}",
+                                        item.ident, fields, caps
+                                    );
                                 }
                             }
-                            None => panic!("Recap regex missing on enum variant {}", variant_name),
-                        }
+                            Fields::Unit => {}
+                        };
                     }
                 }
                 _ => {
@@ -349,62 +357,69 @@ fn validate(
     }
 }
 
+fn extract_struct_regex(item: &DeriveInput) -> Option<String> {
+    item.attrs
+        .iter()
+        .flat_map(syn::Attribute::parse_meta)
+        .filter_map(|x| match x {
+            Meta::List(y) => Some(y),
+            _ => None,
+        })
+        .filter(|x| x.path.is_ident("recap"))
+        .flat_map(|x| x.nested.into_iter())
+        .filter_map(|x| match x {
+            NestedMeta::Meta(y) => Some(y),
+            _ => None,
+        })
+        .filter_map(|x| match x {
+            Meta::NameValue(y) => Some(y),
+            _ => None,
+        })
+        .find(|x| x.path.is_ident("regex"))
+        .and_then(|x| match x.lit {
+            Lit::Str(y) => Some(y.value()),
+            _ => None,
+        })
+}
+
+fn extract_enum_regexes(data_enum: &DataEnum) -> HashMap<String, String> {
+    data_enum
+        .variants
+        .iter()
+        .map(|variant| {
+            let regex = variant
+                .attrs
+                .iter()
+                .flat_map(syn::Attribute::parse_meta)
+                .filter_map(|x| match x {
+                    Meta::List(y) => Some(y),
+                    _ => None,
+                })
+                .filter(|x| x.path.is_ident("recap"))
+                .flat_map(|x| x.nested.into_iter())
+                .filter_map(|x| match x {
+                    NestedMeta::Meta(y) => Some(y),
+                    _ => None,
+                })
+                .filter_map(|x| match x {
+                    Meta::NameValue(y) => Some(y),
+                    _ => None,
+                })
+                .find(|x| x.path.is_ident("regex"))
+                .and_then(|x| match x.lit {
+                    Lit::Str(y) => Some(y.value()),
+                    _ => None,
+                })
+                .unwrap();
+            (format!("{}", variant.ident), regex)
+        })
+        .collect()
+}
+
 fn extract_regex(item: &DeriveInput) -> Option<Regexes> {
     match &item.data {
-        Struct(DataStruct {
-            fields: Fields::Named(fs),
-            ..
-        }) => item
-            .attrs
-            .iter()
-            .flat_map(syn::Attribute::parse_meta)
-            .filter_map(|x| match x {
-                Meta::List(y) => Some(y),
-                _ => None,
-            })
-            .filter(|x| x.path.is_ident("recap"))
-            .flat_map(|x| x.nested.into_iter())
-            .filter_map(|x| match x {
-                NestedMeta::Meta(y) => Some(y),
-                _ => None,
-            })
-            .filter_map(|x| match x {
-                Meta::NameValue(y) => Some(y),
-                _ => None,
-            })
-            .find(|x| x.path.is_ident("regex"))
-            .and_then(|x| match x.lit {
-                Lit::Str(y) => Some(Regexes::StructRegex(y.value())),
-                _ => None,
-            }),
-        Enum(DataEnum {
-            enum_token,
-            brace_token,
-            variants,
-        }) => {
-            let mut regexes: HashMap<String, String> = HashMap::new();
-            for variant in variants {
-                let variant_name = format!("{}", variant.ident);
-                for attr in variant.attrs.iter() {
-                    if attr.path.is_ident("recap") {
-                        let meta = attr.parse_meta().unwrap();
-                        if let Meta::List(meta_list) = meta {
-                            for nested_meta in meta_list.nested {
-                                if let syn::NestedMeta::Meta(syn::Meta::NameValue(nv)) = nested_meta
-                                {
-                                    if nv.path.is_ident("regex") {
-                                        if let syn::Lit::Str(lit_str) = nv.lit {
-                                            regexes.insert(variant_name.clone(), lit_str.value());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Some(Regexes::EnumRegexes(regexes))
-        }
+        Struct(_) => extract_struct_regex(item).map(Regexes::StructRegex),
+        Enum(data_enum) => Some(Regexes::EnumRegexes(extract_enum_regexes(data_enum))),
         _ => None,
     }
 }
