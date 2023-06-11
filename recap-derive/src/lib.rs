@@ -94,6 +94,11 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
             }
         }
         Regexes::EnumRegexes(regexes) => {
+            let data_enum = match item.data {
+                Enum(data_enum) => data_enum,
+                _ => panic!("expected Enum"),
+            };
+
             let impl_from_str = if !has_lifetimes {
                 let from_str_regexes = regexes.iter().map(|(variant_name, regex)| {
                     let regex_name_injector = Ident::new(
@@ -106,18 +111,39 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
                     }
                 });
 
-                let try_parse_regexes = regexes.iter().map(|(variant_name, regex)| {
-                    let regex_name_injector =
-                        Ident::new(&format!("RE_{}", variant_name), Span::call_site());
-
-                    quote! {
-                        if let Some(caps) = #regex_name_injector.captures(&s) {
-                            return Ok(#variant_name {
-
-                            })
+                let try_parse_regexes = data_enum.variants.iter().map(|variant| {
+                    let variant_name = &variant.ident;
+                    let name = &item.ident;
+                    let regex_name_injector = Ident::new(
+                        &format!("RE_{}", variant_name),
+                        Span::call_site(),
+                    );
+                    match &variant.fields {
+                        Fields::Named(fields) => {
+                            let fields: Vec<Ident> = fields.named.iter().map(|f| f.ident.clone().unwrap()).collect();
+                            quote! {
+                                if let Some(caps) = #regex_name_injector.captures(&s) {
+                                    return Ok(#name::#variant_name {
+                                        #(#fields: caps.name(stringify!(#fields)).unwrap().as_str().try_into().unwrap(),)*
+                                    })
+                                }
+                            }
                         }
-                    }
-                });
+                        Fields::Unnamed(_) => {
+                            quote! {
+                                if let Ok(value) = recap::from_captures(&#regex_name_injector, &s) {
+                                    return Ok(#name::#variant_name(value))
+                                }
+                            }
+                        }
+                        Fields::Unit => {
+                            quote! {
+                                if #regex_name_injector.is_match(&s) {
+                                    return Ok(#name::#variant_name)
+                                }
+                            }
+                        }
+                }});
 
                 quote! {
                     impl #impl_generics std::str::FromStr for #item_ident #ty_generics #where_clause {
@@ -151,18 +177,39 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
                     }
                 });
 
-                let try_parse_regexes = regexes.keys().map(|variant_name| {
-                    let regex_name_injector =
-                        Ident::new(&format!("RE_{}", variant_name), Span::call_site());
-                    quote! {
-                        match recap::from_captures(&#regex_name_injector, s) {
-                            Ok(value) => {return Ok(value)},
-                            Err(e) => {
-                                panic!("{}", e);
+                let try_parse_regexes = data_enum.variants.iter().map(|variant| {
+                    let variant_name = &variant.ident;
+                    let name = &item.ident;
+                    let regex_name_injector = Ident::new(
+                        &format!("RE_{}", variant_name),
+                        Span::call_site(),
+                    );
+                    match &variant.fields {
+                        Fields::Named(fields) => {
+                            let fields: Vec<Ident> = fields.named.iter().map(|f| f.ident.clone().unwrap()).collect();
+                            quote! {
+                                if let Some(caps) = #regex_name_injector.captures(&s) {
+                                    return Ok(#name::#variant_name {
+                                        #(#fields: caps.name(stringify!(#fields)).unwrap().as_str().try_into().unwrap(),)*
+                                    })
+                                }
                             }
-                        };
-                    }
-                });
+                        }
+                        Fields::Unnamed(_) => {
+                            quote! {
+                                if let Ok(value) = recap::from_captures(&#regex_name_injector, &s) {
+                                    return Ok(#name::#variant_name(value))
+                                }
+                            }
+                        }
+                        Fields::Unit => {
+                            quote! {
+                                if #regex_name_injector.is_match(&s) {
+                                    return Ok(#name::#variant_name)
+                                }
+                            }
+                        }
+                }});
 
                 quote! {
                     impl #impl_generics std::convert::TryFrom<& #(#lifetimes)* str> for #item_ident #ty_generics #where_clause {
