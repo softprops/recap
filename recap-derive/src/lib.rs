@@ -109,6 +109,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
                 let try_parse_regexes = regexes.iter().map(|(variant_name, regex)| {
                     let regex_name_injector =
                         Ident::new(&format!("RE_{}", variant_name), Span::call_site());
+
                     quote! {
                         if let Some(caps) = #regex_name_injector.captures(&s) {
                             return Ok(#variant_name {
