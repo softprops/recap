@@ -2,7 +2,7 @@
 //! extracted from strings.
 //!
 //! You may find this crate useful for cases where input is provided as a raw string in a loosely structured format.
-//! A common use case for this is when you're dealing with log file data that was not stored in a particular structed format
+//! A common use case for this is when you're dealing with log file data that was not stored in a particular structured format
 //! like JSON but rather in a format that can be represented with a pattern.
 //!
 //! Recap is provides what [envy](https://crates.io/crates/envy) provides environment variables for named regex capture groups
@@ -70,7 +70,7 @@
 //! ```
 //!
 //! You can also use recap by using the generic function `from_captures` in which
-//! case you'll be reponsible for bringing your only Regex reference.
+//! case you'll be responsible for bringing your only Regex reference.
 //!
 //! 💡 For convenience the [regex](https://crates.io/crates/regex) crate's [`Regex`](https://docs.rs/regex/latest/regex/struct.Regex.html)
 //! type is re-exported
@@ -104,6 +104,48 @@
 //!   );
 //!
 //!   Ok(())
+//! }
+//! ```
+//!
+//! Nested deserialization with recap can be achieved by having recap take over deriving [serde::Deserialize], which
+//! can be enabled with the `[recap(handle_deserialize)]` attribute. Note that you'll need to *not* include
+//! `#[derive(Deserialize)]` and that this currently doesn't support all of the features of serde's Deserialize
+//! derivation, such as zero-copy.
+//!
+//! ```rust
+//! use recap::Recap;
+//! use std::error::Error;
+//!
+//! #[derive(Debug, PartialEq, Recap)]
+//! #[recap(handle_deserialize, regex = r"(?P<foo>\w+):(?P<bar>\d+)")]
+//! struct Inner {
+//!     foo: String,
+//!     bar: u32,
+//! }
+//!
+//! #[derive(Debug, PartialEq, Recap)]
+//! #[recap(handle_deserialize, regex = r"(?P<first>[^ ]+)( (?P<second>[^ ]+))?")]
+//! struct Outer {
+//!     first: Inner,
+//!     second: Option<Inner>,
+//! }
+//!
+//! fn main() -> Result<(), Box<dyn Error>>  {
+//!     let outer: Outer = "abc:123 def:456".try_into().unwrap();
+//!     assert_eq!(
+//!         outer,
+//!         Outer {
+//!             first: Inner {
+//!                 foo: "abc".into(),
+//!                 bar: 123
+//!             },
+//!             second: Some(Inner {
+//!                 foo: "def".into(),
+//!                 bar: 456,
+//!             }),
+//!         }
+//!     );
+//!     Ok(())
 //! }
 //! ```
 pub use regex::Regex;
