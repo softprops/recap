@@ -8,10 +8,30 @@ use syn::{
     parse_macro_input, Data::Struct, DataStruct, DeriveInput, Fields, Ident, Lit, Meta, NestedMeta,
 };
 
-#[proc_macro_derive(Recap, attributes(recap))]
+mod impl_deserialize;
+
+// We're allowing `serde` attributes here for the case where we implement Deserialize. See `derive_impl_deserialize`
+// for more details.
+#[proc_macro_derive(Recap, attributes(recap, serde))]
 pub fn derive_recap(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
-    let regex = extract_regex(&item).expect(
+    let nested_metas = item
+        .attrs
+        .iter()
+        .flat_map(syn::Attribute::parse_meta)
+        .filter_map(|x| match x {
+            Meta::List(y) => Some(y),
+            _ => None,
+        })
+        .filter(|x| x.path.is_ident("recap"))
+        .flat_map(|x| x.nested.into_iter())
+        .filter_map(|x| match x {
+            NestedMeta::Meta(y) => Some(y),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    let regex = extract_regex(&nested_metas).expect(
         r#"Unable to resolve recap regex.
             Make sure your structure has declared an attribute in the form:
             #[derive(Deserialize, Recap)]
@@ -75,6 +95,9 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
         }
     };
 
+    let impl_deserialize =
+        impl_deserialize::derive_impl_deserialize(&item, item_ident, nested_metas, regex);
+
     let injector = Ident::new(
         &format!("RECAP_IMPL_FOR_{}", item.ident.to_string()),
         Span::call_site(),
@@ -85,6 +108,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
             extern crate recap;
             #impl_inner
             #impl_matcher
+            #impl_deserialize
         };
     };
 
@@ -117,26 +141,15 @@ fn validate(
     }
 }
 
-fn extract_regex(item: &DeriveInput) -> Option<String> {
-    item.attrs
+fn extract_regex(nested_metas: &[Meta]) -> Option<String> {
+    nested_metas
         .iter()
-        .flat_map(syn::Attribute::parse_meta)
-        .filter_map(|x| match x {
-            Meta::List(y) => Some(y),
-            _ => None,
-        })
-        .filter(|x| x.path.is_ident("recap"))
-        .flat_map(|x| x.nested.into_iter())
-        .filter_map(|x| match x {
-            NestedMeta::Meta(y) => Some(y),
-            _ => None,
-        })
         .filter_map(|x| match x {
             Meta::NameValue(y) => Some(y),
             _ => None,
         })
         .find(|x| x.path.is_ident("regex"))
-        .and_then(|x| match x.lit {
+        .and_then(|x| match &x.lit {
             Lit::Str(y) => Some(y.value()),
             _ => None,
         })
