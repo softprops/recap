@@ -5,7 +5,8 @@ use proc_macro2::Span;
 use quote::quote;
 use regex::Regex;
 use syn::{
-    parse_macro_input, Data::Struct, DataStruct, DeriveInput, Fields, Ident, Lit, Meta, NestedMeta,
+    parse_macro_input, Data::Struct, DataStruct, DeriveInput, Fields, Ident, Lit, Meta,
+    MetaNameValue, NestedMeta,
 };
 
 #[proc_macro_derive(Recap, attributes(recap))]
@@ -25,18 +26,25 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
     let item_ident = &item.ident;
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
 
+    let field_options = extract_field_options_tokens(&item);
+    let static_recap_data = quote! {
+        recap::lazy_static! {
+            static ref RE: recap::Regex = recap::Regex::new(#regex)
+                .expect("Failed to compile regex");
+            static ref FIELD_OPTIONS: std::collections::HashMap<String, recap::FieldOptions> =
+                #field_options
+                .into_iter()
+                .collect();
+        }
+    };
+
     let has_lifetimes = item.generics.lifetimes().count() > 0;
     let impl_from_str = if !has_lifetimes {
         quote! {
             impl #impl_generics std::str::FromStr for #item_ident #ty_generics #where_clause {
                 type Err = recap::Error;
                 fn from_str(s: &str) -> Result<Self, Self::Err> {
-                    recap::lazy_static! {
-                        static ref RE: recap::Regex = recap::Regex::new(#regex)
-                            .expect("Failed to compile regex");
-                    }
-
-                    recap::from_captures(&RE, s)
+                    recap::from_captures_with_options(&RE, s, Some(&FIELD_OPTIONS))
                 }
             }
         }
@@ -50,12 +58,7 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
         impl #impl_generics std::convert::TryFrom<& #(#lifetimes)* str> for #item_ident #ty_generics #where_clause {
             type Error = recap::Error;
             fn try_from(s: & #(#also_lifetimes)* str) -> Result<Self, Self::Error> {
-                recap::lazy_static! {
-                    static ref RE: recap::Regex = recap::Regex::new(#regex)
-                        .expect("Failed to compile regex");
-                }
-
-                recap::from_captures(&RE, s)
+                recap::from_captures_with_options(&RE, s, Some(&FIELD_OPTIONS))
             }
         }
         #impl_from_str
@@ -66,23 +69,17 @@ pub fn derive_recap(item: TokenStream) -> TokenStream {
             /// Recap derived method. Returns true when some input text
             /// matches the regex associated with this type
             pub fn is_match(input: &str) -> bool {
-                recap::lazy_static! {
-                    static ref RE: recap::Regex = recap::Regex::new(#regex)
-                        .expect("Failed to compile regex");
-                }
                 RE.is_match(input)
             }
         }
     };
 
-    let injector = Ident::new(
-        &format!("RECAP_IMPL_FOR_{}", item.ident.to_string()),
-        Span::call_site(),
-    );
+    let injector = Ident::new(&format!("RECAP_IMPL_FOR_{}", item.ident), Span::call_site());
 
     let out = quote! {
         const #injector: () = {
             extern crate recap;
+            #static_recap_data
             #impl_inner
             #impl_matcher
         };
@@ -117,8 +114,8 @@ fn validate(
     }
 }
 
-fn extract_regex(item: &DeriveInput) -> Option<String> {
-    item.attrs
+fn get_nested_metas(attrs: &[syn::Attribute]) -> impl Iterator<Item = Meta> + '_ {
+    attrs
         .iter()
         .flat_map(syn::Attribute::parse_meta)
         .filter_map(|x| match x {
@@ -131,6 +128,10 @@ fn extract_regex(item: &DeriveInput) -> Option<String> {
             NestedMeta::Meta(y) => Some(y),
             _ => None,
         })
+}
+
+fn extract_regex(item: &DeriveInput) -> Option<String> {
+    get_nested_metas(&item.attrs)
         .filter_map(|x| match x {
             Meta::NameValue(y) => Some(y),
             _ => None,
@@ -140,4 +141,53 @@ fn extract_regex(item: &DeriveInput) -> Option<String> {
             Lit::Str(y) => Some(y.value()),
             _ => None,
         })
+}
+
+/// The resulting tokens will be a (possibly empty) array of pairs in the
+/// form of `[("field_name", FieldOptions { ... }), ...]`
+fn extract_field_options_tokens(item: &DeriveInput) -> proc_macro2::TokenStream {
+    let Struct(DataStruct {
+        fields: Fields::Named(fields_named),
+        ..
+    }) = &item.data
+    else {
+        panic!("Recap regex can only be applied to Structs with named fields")
+    };
+    let field_name_options_pairs = fields_named.named.iter().filter_map(|named| {
+        let name = named.ident.as_ref().unwrap().to_string();
+        let options_tokens = get_nested_metas(&named.attrs)
+            // This all probably would need to evolve if/when we ever need to handle more types
+            // of attributes but it's probably fine for now?
+            .map(|x| match x {
+                Meta::NameValue(MetaNameValue {
+                    path,
+                    lit: Lit::Str(lit),
+                    ..
+                }) if path.is_ident("delimiter_regex") => {
+                    // Validate the regex now
+                    Regex::new(&lit.value()).unwrap_or_else(|_| {
+                        panic!(
+                            "invalid regex given to `delimiter_regex` for field {}",
+                            name
+                        )
+                    });
+                    quote! { #path: Some(recap::Regex::new(#lit).unwrap()) }
+                }
+                _ => panic!(r#"Expected attributes in the form of `delimiter_regex = "..."`"#),
+            })
+            .collect::<Vec<_>>();
+        if options_tokens.is_empty() {
+            None
+        } else {
+            Some(quote! {
+                (#name.to_owned(), recap::FieldOptions {
+                    #(#options_tokens),*
+                })
+            })
+        }
+    });
+
+    quote! {
+        [#(#field_name_options_pairs),*]
+    }
 }

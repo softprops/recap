@@ -106,12 +106,40 @@
 //!   Ok(())
 //! }
 //! ```
+//!
+//! For fields which are sequences, the capture group should capture the entire sequence. Recap will then split it up
+//! using a delimiter and deserialize each section individually. By default recap will use `","` as the delimiter, but
+//! this can be controlled with the `#[recap(delimit_regex = "...")]` field attribute.
+//!
+//! ```rust
+//! use recap::Recap;
+//! use serde::Deserialize;
+//!
+//! #[derive(Debug, Deserialize, PartialEq, Recap)]
+//! #[recap(regex = r"(?P<strings>[^;]+); (?P<nums>.+)")]
+//! struct Test {
+//!     // Defaults to ',' as the delimiter
+//!     strings: Vec<String>,
+//!     #[recap(delimiter_regex = " +")]
+//!     nums: Vec<u32>,
+//! }
+//!
+//! let test: Test = "a,b,c; 12    34 56".try_into().unwrap();
+//! assert_eq!(
+//!     test,
+//!     Test {
+//!         strings: vec!["a".into(), "b".into(), "c".into()],
+//!         nums: vec![12, 34, 56]
+//!     }
+//! );
+//! ```
 pub use regex::Regex;
 use serde::de::{
     self,
     value::{BorrowedStrDeserializer, MapDeserializer, SeqDeserializer},
     Deserialize, IntoDeserializer,
 };
+use std::collections::HashMap;
 
 // used in derive crate output
 // to derive a static for compiled
@@ -135,9 +163,9 @@ type Result<T> = envy::Result<T>;
 
 struct Vars<'a, Iter>(Iter)
 where
-    Iter: IntoIterator<Item = (&'a str, &'a str)>;
+    Iter: IntoIterator<Item = (&'a str, &'a str, Option<&'a FieldOptions>)>;
 
-struct Val<'a>(&'a str, &'a str);
+struct Val<'a>(&'a str, &'a str, Option<&'a FieldOptions>);
 
 impl<'a: 'de, 'de> IntoDeserializer<'de, Error> for Val<'a> {
     type Deserializer = Self;
@@ -157,11 +185,13 @@ impl<'a: 'de, 'de> IntoDeserializer<'de, Error> for VarName<'a> {
     }
 }
 
-impl<'a, Iter: Iterator<Item = (&'a str, &'a str)>> Iterator for Vars<'a, Iter> {
+impl<'a, Iter: Iterator<Item = (&'a str, &'a str, Option<&'a FieldOptions>)>> Iterator
+    for Vars<'a, Iter>
+{
     type Item = (VarName<'a>, Val<'a>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|(k, v)| (VarName(k), Val(k, v)))
+        self.0.next().map(|(k, v, o)| (VarName(k), Val(k, v, o)))
     }
 }
 
@@ -199,7 +229,16 @@ impl<'a: 'de, 'de> de::Deserializer<'de> for Val<'a> {
     where
         V: de::Visitor<'de>,
     {
-        let values = self.1.split(',').map(|v| Val(self.0, v));
+        lazy_static! {
+            static ref DEFAULT_DELIMITER_REGEX: Regex = Regex::new(",").unwrap();
+        }
+        let delimiter_regex = self
+            .2
+            .and_then(|opt| opt.delimiter_regex.as_ref())
+            .unwrap_or(&DEFAULT_DELIMITER_REGEX);
+        let values = delimiter_regex
+            .split(self.1)
+            .map(|v| Val(self.0, v, self.2));
         SeqDeserializer::new(values).deserialize_seq(visitor)
     }
 
@@ -292,11 +331,17 @@ impl<'a: 'de, 'de> de::Deserializer<'de> for VarName<'a> {
 }
 
 /// A deserializer for env vars
-struct Deserializer<'a, 'de: 'a, Iter: Iterator<Item = (&'a str, &'a str)>> {
+struct Deserializer<
+    'a,
+    'de: 'a,
+    Iter: Iterator<Item = (&'a str, &'a str, Option<&'a FieldOptions>)>,
+> {
     inner: MapDeserializer<'de, Vars<'a, Iter>, Error>,
 }
 
-impl<'a, 'de: 'a, Iter: Iterator<Item = (&'a str, &'a str)>> Deserializer<'a, 'de, Iter> {
+impl<'a, 'de: 'a, Iter: Iterator<Item = (&'a str, &'a str, Option<&'a FieldOptions>)>>
+    Deserializer<'a, 'de, Iter>
+{
     fn new(vars: Iter) -> Self {
         Deserializer {
             inner: MapDeserializer::new(Vars(vars)),
@@ -304,8 +349,8 @@ impl<'a, 'de: 'a, Iter: Iterator<Item = (&'a str, &'a str)>> Deserializer<'a, 'd
     }
 }
 
-impl<'a: 'de, 'de, Iter: Iterator<Item = (&'a str, &'a str)>> de::Deserializer<'de>
-    for Deserializer<'a, 'de, Iter>
+impl<'a: 'de, 'de, Iter: Iterator<Item = (&'a str, &'a str, Option<&'a FieldOptions>)>>
+    de::Deserializer<'de> for Deserializer<'a, 'de, Iter>
 {
     type Error = Error;
     fn deserialize_any<V>(
@@ -341,9 +386,16 @@ impl<'a: 'de, 'de, Iter: Iterator<Item = (&'a str, &'a str)>> de::Deserializer<'
 fn from_iter<'a, Iter, T>(iter: Iter) -> Result<T>
 where
     T: de::Deserialize<'a>,
-    Iter: IntoIterator<Item = (&'a str, &'a str)>,
+    Iter: IntoIterator<Item = (&'a str, &'a str, Option<&'a FieldOptions>)>,
 {
     T::deserialize(Deserializer::new(iter.into_iter()))
+}
+
+/// Options for a given field
+pub struct FieldOptions {
+    /// If given for a sequence field, will split the captured string using this Regex. Otherwise
+    /// sequence fields split on comma (`","`).
+    pub delimiter_regex: Option<Regex>,
 }
 
 /// Deserialize a type from named regex capture groups
@@ -356,16 +408,33 @@ pub fn from_captures<'a, D>(
 where
     D: Deserialize<'a>,
 {
+    from_captures_with_options(re, input, None)
+}
+
+/// Deserialize a type from named regex capture groups. Allows specifying options for each field.
+///
+/// See module level documentation for examples
+pub fn from_captures_with_options<'a, D>(
+    re: &'a Regex,
+    input: &'a str,
+    field_options: Option<&'a HashMap<String, FieldOptions>>,
+) -> Result<D>
+where
+    D: Deserialize<'a>,
+{
     let caps = re.captures(input).ok_or_else(|| {
         envy::Error::Custom(format!("No captures resolved in string '{}'", input))
     })?;
-    from_iter(
-        re.capture_names()
-            .map(|maybe_name| {
-                maybe_name.and_then(|name| caps.name(name).map(|val| (name, val.as_str())))
-            })
-            .flatten(),
-    )
+
+    from_iter(re.capture_names().flatten().filter_map(|name| {
+        caps.name(name).map(|val| {
+            (
+                name,
+                val.as_str(),
+                field_options.and_then(|fo| fo.get(name)),
+            )
+        })
+    }))
 }
 
 #[cfg(test)]
